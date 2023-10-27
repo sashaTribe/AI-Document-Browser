@@ -33,20 +33,27 @@ def get_text_chunks(text):
     chunks = text_splitter.split_text(text)
     return chunks
 
-def get_vectorstore(text_chunks):
+def load_vector_data(text_chunks):
     embeddings = OpenAIEmbeddings()
     vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
+    vectorstore.save_local("faiss_vectorstore")
     return vectorstore
 
-def get_conversation_chain(vectorstore):
+def get_conversation_chain(query, chat_history = None):
+
+    if chat_history is None:
+        chat_history = []
+
+    doc_search = FAISS.load_local(folder_path="faiss_vectorstore", embeddings=OpenAIEmbeddings())
+    print(doc_search.similarity_search(query))
+
     llm = ChatOpenAI()
-    memory = ConversationBufferMemory(memory_key='chat_history', return_messages=True)
     conversation_chain = ConversationalRetrievalChain.from_llm(
         llm=llm,
-        retriever=vectorstore.as_retriever(),
-        memory=memory
+        retriever=doc_search.as_retriever(),
+        chain_type="stuff"
     )
-    return conversation_chain
+    return conversation_chain({"question": query, "chat_history": chat_history})
 
 def init():
     load_dotenv()
@@ -55,35 +62,39 @@ def init():
         print("OPENAI_API_KEY is not set")
         exit(1)
     else:
-        print("OPENAI_API_KEY is set")
+        # print("OPENAI_API_KEY is set")
+        pass
 
     st.set_page_config(page_title="AI Document Reader Chat", page_icon=":books:")
 
 def main():
-    init()
-
-    chat = ChatOpenAI(temperature=1)
-
     if "conversation" not in st.session_state:
-        st.session_state.conversation = [
-            SystemMessage(content="Hello there! How may I be of assistance?")
-            ]
+        st.session_state.conversation = []
+    
+    if "user_prompt_history" not in st.session_state:
+        st.session_state["user_prompt_history"] = []
+    
+    if "chat_response_history" not in st.session_state:
+        st.session_state["chat_response_history"] = []
 
     st.header("AI Document Reader Chat")
 
     user_question = st.text_input("Ask a question about your document: ", key="user_question")
-    if user_question and user_question not in [message.content for message in st.session_state.conversation]:
-       st.session_state.conversation.append(HumanMessage(content=user_question))
-       with st.spinner("Thinking..."):
-            response = chat(st.session_state.conversation)
-       st.session_state.conversation.append(AIMessage(content=response.content))
+    chat_history = []
+
+    if user_question:
+        st.session_state["user_prompt_history"].append(user_question)
+        with st.spinner("Thinking..."):
+            response = get_conversation_chain(user_question, chat_history)
+            print("RESPONSE!", response)
+            st.session_state["chat_response_history"].append(response["answer"])
+
+        chat_history.append((user_question, response["answer"]))
     
-    conversation = st.session_state.get('conversation', [])
-    for i, msg in enumerate(conversation[1:]):
-        if i % 2 == 0:
-            message(msg.content, is_user=True, key=str(i) + '_user')
-        else:
-            message(msg.content, is_user=False, key=str(i) + '_ai')
+    if chat_history:
+        for response, prompt in zip(st.session_state["chat_response_history"], st.session_state["user_prompt_history"]):
+            message(prompt, is_user=True)
+            message(response)
 
     with st.sidebar:
         st.subheader("Your Documents")
@@ -93,8 +104,10 @@ def main():
             with st.spinner("Processing"):
                 raw_text = get_pdf_text(pdf_docs)                                           # Turns PDF Into Text
                 text_chunks = get_text_chunks(raw_text)                                     # Splits Text in chunks
-                vectorstore = get_vectorstore(text_chunks)                                  # Store Vectors
-                st.session_state.conversation = get_conversation_chain(vectorstore)    # Conversation Chain
+                st.write(text_chunks)
+                vectorstore = load_vector_data(text_chunks)                                  # Store Vectors
+                  # Conversation Chain
 
 if __name__ == '__main__':
+    init()
     main()
