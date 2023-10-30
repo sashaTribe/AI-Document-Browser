@@ -7,14 +7,19 @@ from langchain.vectorstores.faiss import FAISS
 from langchain.chat_models import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import ConversationalRetrievalChain
+# I really like what you did below, saves some code, something I should try next time
 from langchain.schema import (
     SystemMessage,
     HumanMessage,
     AIMessage
 )
+
 from streamlit_chat import message
 import os
- 
+
+# would be cool if you added more documentation about your functions so 
+# it could save developers time on trying to understand what the functions do,
+# other than that, very neat code.
 def get_pdf_text(pdf_docs):
     text = ""
     for pdf in pdf_docs:
@@ -22,7 +27,8 @@ def get_pdf_text(pdf_docs):
         for page in pdf_reader.pages:
             text +=page.extract_text()
     return text
-
+# Good name choices for functions, I can tell you broke a lot of the work flow to 
+# smaller functions which I think its fantastic
 def get_text_chunks(text):
     text_splitter = RecursiveCharacterTextSplitter(
         separators=["\n","\n\n"," ",""],
@@ -81,7 +87,7 @@ def main():
 
     user_question = st.text_input("Ask a question about your document: ", key="user_question")
     chat_history = []
-
+# does this loop over?
     if user_question:
         st.session_state["user_prompt_history"].append(user_question)
         with st.spinner("Thinking..."):
@@ -95,7 +101,8 @@ def main():
         for response, prompt in zip(st.session_state["chat_response_history"], st.session_state["user_prompt_history"]):
             message(prompt, is_user=True)
             message(response)
-
+# I think this is a really cool way to upload docs, you give them the option to upload more to make the chatbot more intelligent
+# But is that what the client wanted or is it just for yourself to do?
     with st.sidebar:
         st.subheader("Your Documents")
         pdf_docs = st.file_uploader(
